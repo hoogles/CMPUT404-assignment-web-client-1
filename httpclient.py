@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
-# Copyright 2016 Abram Hindle, https://github.com/tywtyw2002, and https://github.com/treedust
+# Copyright 2013 Abram Hindle
 # 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,48 +27,128 @@ import urllib
 def help():
     print "httpclient.py [GET/POST] [URL]\n"
 
-class HTTPResponse(object):
+class HTTPRequest(object):
     def __init__(self, code=200, body=""):
         self.code = code
         self.body = body
 
 class HTTPClient(object):
-    #def get_host_port(self,url):
+    def get_host_port(self,url):
+	#sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	hostname = url.split('://')[1]
 
+	url2 = hostname.split('/')[0]
+	host = socket.gethostbyname(url2)
+
+	return (host,80)
+
+    # creates a socket connected to host via port
+    # REMEMBER TO CLOSE THE SOCKETS WHEN YOU USE THEM
     def connect(self, host, port):
         # use sockets!
-        return None
+	# sew the sock
+	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	sock.settimeout(1)
+	# put on the sock
+	sock.connect((host,port))
+	print 'connected to ' + host, port
+	return sock	
 
     def get_code(self, data):
-        return None
+        return data.split()[1]
 
     def get_headers(self,data):
-        return None
+	data = data.split('\r\n\r\n')
+	data = data - data[-1]
+        return data 
 
     def get_body(self, data):
-        return None
+        return data.split('\r\n\r\n')[-1]
 
     # read everything from the socket
     def recvall(self, sock):
+
         buffer = bytearray()
         done = False
         while not done:
-            part = sock.recv(1024)
-            if (part):
-                buffer.extend(part)
-            else:
-                done = not part
+	    try:
+		part = sock.recv(1024)
+		if (part):
+		    buffer.extend(part)
+		else:
+		    done = not part
+	    except:
+		return str(buffer)
         return str(buffer)
-
+    # Perform an HTTP GET request
     def GET(self, url, args=None):
         code = 500
-        body = ""
-        return HTTPResponse(code, body)
+	(http, uri) = re.split('://',url)
+	target = ""	
+	hostname = ""
+	try:
+	    hostname = uri.split('/')[0]
+	    target = uri.split('/')[1]
+	except:
+	    hostname = uri
+	    target = ""        
+	
+	body = "GET /"+target+"  HTTP/1.1 \r\nHost: "+hostname+" \r\n\r\n"
+	host = ""
+	port = 80
+	try:
+	    (host,port) = self.get_host_port(url)
+	    sock = self.connect(host,port)
+	    sock.sendall(body)
+	    buff = self.recvall(sock)
+	    code = self.get_code(buff)
+	    body = self.get_body(buff)
+	    if len(buff) == 0:
+		code = 404
+	    sock.close()
+	except: 
+	    code = 404
+	
+        return HTTPRequest(code, body)
 
-    def POST(self, url, args=None):
-        code = 500
-        body = ""
-        return HTTPResponse(code, body)
+
+    # Perform an HTTP POST request
+    def POST(self, url, args=None): 
+	code = 500
+	(http, uri) = re.split('://',url)
+	target = ""	
+	hostname = ""
+	try:
+	    hostname = uri.split('/')[0]
+	    target = uri.split('/')[1]
+	except:
+	    hostname = uri
+	    target = ""        
+	
+	body = "POST "+ target +" / HTTP/1.1 \r\n content-type:application/x-www-form-urlencoded;charset=utf-8 \r\n Host: www."+hostname+" \r\n "
+	try:	
+	    query = re.split('\?', target)
+	    query = query[1]
+            body += len(query)+"\r\n" +query + '\r\n\r\n'
+	except:
+	    body += "\r\n"
+	#sock_host = ""
+	host = ""
+	port = 80
+	try:
+	    (host,port) = self.get_host_port(url)
+	    sock = self.connect(host,port)
+	    sock.sendall(body)
+	    buff = self.recvall(sock)
+	    code = self.get_code(buff)
+	    body = self.get_body(buff)
+	    if len(buff) == 0:
+		code = 404
+	    sock.close()
+	except: 
+	    code = 404
+	
+        return HTTPRequest(code, body)
 
     def command(self, url, command="GET", args=None):
         if (command == "POST"):
@@ -83,6 +163,6 @@ if __name__ == "__main__":
         help()
         sys.exit(1)
     elif (len(sys.argv) == 3):
-        print client.command( sys.argv[2], sys.argv[1] )
+        print client.command( sys.argv[1], sys.argv[2] )
     else:
-        print client.command( sys.argv[1] )   
+        print client.command( command, sys.argv[1] )    
